@@ -44,6 +44,7 @@ class ActorCritic(nn.Module):
                         critic_hidden_dims=[256, 256, 256],
                         activation='elu',
                         init_noise_std=1.0,
+                        fixed_std=False,
                         **kwargs):
         if kwargs:
             print("ActorCritic.__init__ got unexpected arguments, which will be ignored: " + str([key for key in kwargs.keys()]))
@@ -82,7 +83,9 @@ class ActorCritic(nn.Module):
         print(f"Critic MLP: {self.critic}")
 
         # Action noise
-        self.std = nn.Parameter(init_noise_std * torch.ones(num_actions))
+        self.fixed_std = fixed_std
+        std = init_noise_std * torch.ones(num_actions)
+        self.std = torch.tensor(std) if fixed_std else nn.Parameter(std)
         self.distribution = None
         # disable args validation for speedup
         Normal.set_default_validate_args = False
@@ -118,7 +121,8 @@ class ActorCritic(nn.Module):
 
     def update_distribution(self, observations):
         mean = self.actor(observations)
-        self.distribution = Normal(mean, mean*0. + self.std)
+        std = self.std.to(mean.device)
+        self.distribution = Normal(mean, mean*0. + std)
 
     def act(self, observations, **kwargs):
         self.update_distribution(observations)
@@ -134,6 +138,7 @@ class ActorCritic(nn.Module):
     def evaluate(self, critic_observations, **kwargs):
         value = self.critic(critic_observations)
         return value
+
 
 def get_activation(act_name):
     if act_name == "elu":
